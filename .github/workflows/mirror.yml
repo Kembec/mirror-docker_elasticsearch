@@ -1,0 +1,46 @@
+name: Mirror Elasticsearch Image
+
+on:
+  schedule:
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Get latest Elasticsearch tag from Docker Hub
+        id: latesttag
+        run: |
+          TAG=$(curl -s 'https://hub.docker.com/v2/repositories/library/elasticsearch/tags?page_size=1' | jq -r '.results[0].name')
+          echo "Latest version of Elasticsearch is $TAG"
+          if [ -z "$TAG" ]; then
+            echo "Failed to find a valid version, check the URL or API."
+            exit 1
+          fi
+          echo "ELASTIC_VERSION=$TAG" >> $GITHUB_ENV
+
+      - name: Pull Elasticsearch image
+        run: |
+          echo "Pulling image for version ${ELASTIC_VERSION}"
+          docker pull elasticsearch:${ELASTIC_VERSION}
+
+      - name: Tag the image
+        run: |
+          docker tag elasticsearch:${ELASTIC_VERSION} kembec/elasticsearch:${ELASTIC_VERSION}
+
+      - name: Push the image to Docker Hub
+        run: |
+          docker push kembec/elasticsearch:${ELASTIC_VERSION}
